@@ -20,19 +20,25 @@
 
    REVISION HISTORY
    Version 1.0 - Henrik EKblad
+   Version 1.1 - rknipp and rejoe2
 
    DESCRIPTION
    Example sketch showing how to control ir devices
    An IR LED must be connected to Arduino PWM pin 3.
    An optional ir receiver can be connected to PWM pin 8.
-   All receied ir signals will be sent to gateway device stored in VAR_1.
-   When binary light on is clicked - sketch will send volume up ir command
-   When binary light off is clicked - sketch will send volume down ir command
+   All received ir signals from PIN 8 will be sent to gateway device stored in IR_RECEIVED.
+   NEW: The Node expects real IR commands to process via the IR_SEND variable (instead of "on/off" via V_LIGHT).
+   Variable format to be sent form controller side is: "protocol code irbits", eg. "1 0x1EE17887 32"
+   for Vol up yamaha ysp-900 (assuming NEC-codes are mapped to protocol #1 in your IRLib).
+
+   IMPORTANT:
+   The IRLib used here is Gabriel Staples version available at https://github.com/ElectricRCAircraftGuy/IRLib,
+   so IR commands are different from the standard IRLib delivered with MySensors!
    http://www.mysensors.org/build/ir
 */
 
 // Enable debug prints
-#define MY_DEBUG
+//#define MY_DEBUG
 #define USE_DUMP //should print out lots of info to serial (ElectricRCAircraftGuy feature?)
 
 // Enable and select radio type attached
@@ -41,18 +47,16 @@
 
 #include <SPI.h>
 #include <MySensor.h>
-#include <IRLib.h> //ElectricRCAircraftGuy version
+#include <IRLib.h> //Gabriel Staples version!
 
 
 int RECV_PIN = 8;
 
-#define CHILD_ID_IR  3  // childId
+#define CHILD_ID_IR  1  // childId
 
 IRsend irsend;
 IRrecv My_Receiver(RECV_PIN);
 IRdecode My_Decoder;
-//decode_results results;
-//unsigned int Buffer[RAWBUF];
 MyMessage msgIr(CHILD_ID_IR, V_IR_RECEIVE);
 
 void setup()
@@ -70,7 +74,7 @@ void setup()
 
 void presentation()  {
   // Send the sketch version information to the gateway and Controller
-  sendSketchInfo("IR Sensor", "1.0");
+  sendSketchInfo("IR Sensor", "1.1");
 
   // Register the sensor als IR Node
   present(CHILD_ID_IR, S_IR);
@@ -82,33 +86,35 @@ void loop()
   {
     //1) decode it
     My_Decoder.decode();
-    //filter out zeros and NEC repeats
+    Serial.println("decoding");
+    Serial.print("Protocol:");
+    Serial.print(Pnames(My_Decoder.decode_type));
+    Serial.print(",");
+    Serial.print(My_Decoder.decode_type);
+    Serial.print(" ");
+    Serial.print(My_Decoder.value, HEX);
+    Serial.print(" ");
+    Serial.println(My_Decoder.bits);
+    //FOR EXTENSIVE OUTPUT:
+    //My_Decoder.dumpResults();
+    //filter out zeros for not recognized codes and NEC repeats
     const char rec_value = My_Decoder.value;
     if (rec_value != 0xffffffff && rec_value != 0x0) {
-
-      Serial.println("decoding");
-
-      //2) print results
-      //FOR BASIC OUTPUT ONLY:
-      Serial.print("Protocol:");
-      Serial.print(Pnames(My_Decoder.decode_type));
-      Serial.print(",");
-      Serial.print(My_Decoder.decode_type);
-      Serial.print(" ");
-      Serial.print(My_Decoder.value, HEX);
-      Serial.print(" ");
-      Serial.println(My_Decoder.bits);
-      //FOR EXTENSIVE OUTPUT:
-      //My_Decoder.dumpResults();
       char buffer[24];
       uint8_t IrBits = My_Decoder.bits;
       String IRType_string = Pnames(My_Decoder.decode_type);
       char IRType[IRType_string.length() + 1];
-      IRType_string.toCharArray(IRType,IRType_string.length() + 1);
-      sprintf(buffer, "%s, %i 0x%08lX %i", IRType, My_Decoder.decode_type, My_Decoder.value, IrBits);
+      IRType_string.toCharArray(IRType, IRType_string.length() + 1);
+      sprintf(buffer, "%i 0x%08lX %i, %s", My_Decoder.decode_type, My_Decoder.value, IrBits, IRType);
       // Send ir result to gw
       send(msgIr.set(buffer));
+      
+      //somedebugging output
+#ifdef MY_DEBUG
+      //2) print results
+      //FOR BASIC OUTPUT ONLY:
       Serial.println(buffer);
+#endif
     }
     //3) resume receiver (ONLY CALL THIS FUNCTION IF SINGLE-BUFFERED); comment this line out if double-buffered
     /*for single buffer use; do NOT resume until AFTER done calling all decoder
@@ -120,46 +126,46 @@ void loop()
   }
 }
 
-
-
 void receive(const MyMessage &message) {
-  const char *irData;
-  // We will try to send a complete send command from controller side, e.g. "NEC, 0x1EE17887, 32"
-  if (message.type == V_IR_SEND) {
+    const char *irData;
+    // Complete send command from controller side is needed, e.g. "1 0x1EE17887 32"
+    if (message.type == V_IR_SEND) {
     irData = message.getString();
+    
+    //some debugging output
 #ifdef MY_DEBUG
     Serial.println(F("Received IR send command..."));
-    //Serial.print(F("Code: 0x")); //we will only need this in case we cannot send the complete command set
     Serial.println(irData);
 #endif
 
-//splitting the received send command needs to be completed
-//also transfer from numeric representation to char for protocol type
-//could be obsolete, if protocol is sent as text
     int i = 0;
     char* arg[3];
     unsigned char protocol;
     unsigned long code;
     unsigned int bits;
-
+   
+    //copy irData to a temporary variable because strtok() is changing the string its working on.
     char* irString = strdup(irData);
-    char* token = strtok(irString," ");
-
-    while(token != NULL){
-       arg[i] = token;
-       token = strtok(NULL, " ");
-       i++;
+    
+    //seperating the String into the three arguments.
+    char* token = strtok(irString, " ");
+    while (token != NULL) {
+      arg[i] = token;
+      token = strtok(NULL, " ");
+      i++;
     }
     
+    //some debugging output
+#ifdef MY_DEBUG
     Serial.print("Protocol:"); Serial.print(arg[0]);
     Serial.print(" Code:"); Serial.print(arg[1]);
     Serial.print(" Bits:"); Serial.println(arg[2]);
+#endif
 
     protocol = atoi(arg[0]);
     code = strtoul(arg[1], NULL, 0);
     bits = atoi(arg[2]);
-
-    irsend.send(protocol,code,bits);
+    irsend.send(protocol, code, bits);
     free(irString);
   }
 
