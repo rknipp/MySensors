@@ -96,7 +96,9 @@ void loop()
     Serial.print(" ");
     Serial.println(My_Decoder.bits);
     //FOR EXTENSIVE OUTPUT:
+    #ifdef USE_DUMP
     //My_Decoder.dumpResults();
+    #endif
     //filter out zeros for not recognized codes and NEC repeats
     const char rec_value = My_Decoder.value;
     if (rec_value != 0xffffffff && rec_value != 0x0) {
