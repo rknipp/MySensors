@@ -21,6 +21,7 @@
    REVISION HISTORY
    Version 1.0 - Henrik EKblad
    Version 1.1 - rknipp and rejoe2
+   Version 1.1.1 - rknipp
 
    DESCRIPTION
    Example sketch showing how to control ir devices
@@ -39,7 +40,7 @@
 
 // Enable debug prints
 //#define MY_DEBUG
-#define USE_DUMP //should print out lots of info to serial (ElectricRCAircraftGuy feature?)
+//#define USE_DUMP //should print out lots of info to serial (ElectricRCAircraftGuy feature?)
 
 // Enable and select radio type attached
 #define MY_RADIO_NRF24
@@ -95,10 +96,12 @@ void loop()
     Serial.print(My_Decoder.value, HEX);
     Serial.print(" ");
     Serial.println(My_Decoder.bits);
+    
     //FOR EXTENSIVE OUTPUT:
-    #ifdef USE_DUMP
-    //My_Decoder.dumpResults();
-    #endif
+#ifdef USE_DUMP
+    My_Decoder.dumpResults();
+#endif
+
     //filter out zeros for not recognized codes and NEC repeats
     const char rec_value = My_Decoder.value;
     if (rec_value != 0xffffffff && rec_value != 0x0) {
@@ -141,7 +144,7 @@ void receive(const MyMessage &message) {
 #endif
 
     int i = 0;
-    char* arg[3];
+    char* arg[3]; //pointer array to save the three arguments
     unsigned char protocol;
     unsigned long code;
     unsigned int bits;
