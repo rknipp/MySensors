@@ -75,7 +75,7 @@ void setup()
 
 void presentation()  {
   // Send the sketch version information to the gateway and Controller
-  sendSketchInfo("IR Sensor", "1.1");
+  sendSketchInfo("IR Sensor", "1.1.1");
 
   // Register the sensor als IR Node
   present(CHILD_ID_IR, S_IR);
